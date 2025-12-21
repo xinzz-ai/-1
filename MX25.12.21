@@ -98,3 +98,406 @@ Pull-up / Pull-down：No pull
 👉 输出模式下不需要内部电阻
 Speed：Low
 👉 LED 不需要高速沿，稳最重要
+
+1️⃣ 先说 Toolchain / IDE：你选 MDK-ARM（Keil）是对的
+结论先给你：
+继续用 Keil 完全没问题，而且对“学原理、看寄存器、调试”反而更直观。
+STM32CubeIDE ≈ Eclipse + GCC + CubeMX
+Keil ≈ 工程师传统主力 + 调试体验成熟
+我们现在目标是“理解 + 能跑 + 能控硬件”，
+不是 IDE 技巧比赛，所以 Keil 没有任何劣势。
+👉 这一点你不用再纠结，后面所有步骤我都按 Keil 来教。
+
+2️⃣ 重点来了：你问的这三个选项，到底是什么意思？
+你现在看到的是这一组👇
+STM32Cube MCU packages and embedded software packs
+Copy all used libraries into the project folder
+Copy only the necessary library files ← 你选的
+Add necessary library files as reference in the toolchain project configuration file
+我们一个一个解释，用工程角度，不说虚的。
+
+🟦 选项 1：Copy all used libraries into the project folder
+含义：
+把 STM32U5 HAL、CMSIS、Driver 等 整套库文件，全部拷贝进你的工程目录
+优点：
+不依赖外部环境
+工程拷走就能编译
+缺点（致命）：
+工程体积巨大
+很多你根本用不到的文件
+后期版本升级极其混乱
+👉 结论：
+❌ 只适合“完全不懂、怕环境坏掉的新手”
+❌ 不适合你现在这种“要长期用、要理解”的阶段
+🟩 选项 2：Copy only the necessary library files（你选的）
+含义（这是重点）：
+CubeMX 会分析你当前工程用了哪些外设
+👉 只把“用到的 HAL / CMSIS 文件”拷进工程
+例如你现在：
+用了 GPIO
+用了 USART
+用了 RCC
+那它只拷：
+stm32u5xx_hal_gpio.c
+stm32u5xx_hal_uart.c
+stm32u5xx_hal_rcc.c
+以及必须的 CMSIS 核心文件
+优点：
+工程最干净
+编译快
+文件可控
+非常适合学习 + 项目
+缺点：
+后面你新增外设（比如 I2C、TIM），需要重新 Generate Code
+👉 但这不是缺点，是优点：
+它强迫你“知道自己加了什么外设”。
+✅ 这是工程师最常用、最推荐的方式
+✅ 你之前“经验上选它”，是完全正确的工程直觉
+🟥 选项 3：Add necessary library files as reference（引用）
+含义：
+工程里不放 HAL 源码
+只在 Keil 工程里“引用 STM32 安装目录下的库”
+优点：
+工程最小
+缺点（非常致命）：
+换电脑 / 发给别人 → 直接编译失败
+路径依赖强
+初学阶段极难排错
+👉 结论：
+❌ 企业大工程才会用
+❌ 你现在阶段坚决不用
+✅ 所以你的选择总结一句话
+你选第二个不是“凭感觉”，而是“选了工程上最正确的方案”。
+
+3️⃣ 现在我们继续：生成工程（正式进 Keil）
+你现在保持如下设置（确认一下）：
+Toolchain / IDE：✅ MDK-ARM
+Copy library：✅ Copy only the necessary library files
+☑ Generate peripheral initialization as a pair of .c/.h files per peripheral
+☑ Keep User Code when re-generating
+☑ Delete previously generated files when not re-generated
+（这个是对的，避免残留垃圾文件）
+
+4️⃣ 你现在只做一个动作（非常明确）
+👉 点击右上角：GENERATE CODE
+CubeMX 会生成一个 Keil 工程。
+
+5️⃣ 生成完成后，你接下来会看到什么（先告诉你，避免慌）
+在工程目录里你会看到：
+一个 *.uvprojx 文件（Keil 工程）
+Core/Inc、Core/Src
+Drivers/STM32U5xx_HAL_Driver
+Drivers/CMSIS
+
+
+
+1️⃣ 先解决你最核心的困惑：程序到底写在哪里？
+在 Keil 里，你只记住一个文件就够了
+Core/Src/main.c
+这是 整个 STM32 程序的入口文件，相当于 PC 上的 main()。
+在 Keil 左侧工程树里，你按这个路径找：
+
+Project
+ └── Core
+     └── Src
+         └── main.c   ← 你要写代码的地方
+
+双击 main.c 打开。
+
+2️⃣ 打开 main.c 后，你会看到什么？（这是 CubeMX 生成的“骨架”）
+你会看到一个结构非常固定的文件，核心长这样（我用文字标出关键点）：
+
+int main(void)
+{
+  HAL_Init();                 // ① HAL 库初始化
+  SystemClock_Config();        // ② 时钟配置（你在 CubeMX 配的）
+
+  MX_GPIO_Init();              // ③ GPIO 初始化（PC13 就在这里被配置）
+  MX_USART1_UART_Init();       // ④ 串口初始化（如果你启用了）
+
+  /* USER CODE BEGIN 2 */
+  // ← 你第一阶段主要写代码的地方
+  /* USER CODE END 2 */
+
+  while (1)
+  {
+    /* USER CODE BEGIN WHILE */
+    // ← 循环执行的代码写在这里
+    /* USER CODE END WHILE */
+  }
+}
+
+你现在只需要记住两个能写代码的位置
+USER CODE BEGIN 2：
+👉 上电后、只执行一次（初始化后的动作）
+while(1) 里面：
+👉 程序一直循环执行（点灯、延时、翻转）
+⚠️ 千万不要写在 USER CODE 外面，否则重新 Generate Code 会被 CubeMX 覆盖。
+3️⃣ 点亮 LED 的“最小程序”长什么样？（先看效果，再解释）
+你现在只做一件事：
+👉 让 PC13（LED_D1）常亮
+在 USER CODE BEGIN 2 里写这一行：
+HAL_GPIO_WritePin(LED_D1_GPIO_Port, LED_D1_Pin, GPIO_PIN_SET);
+
+就这一行。
+
+4️⃣ 这一行代码到底干了什么？（逐参数解释）
+函数原型（你不用背）
+HAL_GPIO_WritePin(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, GPIO_PinState PinState);
+对应到你现在的代码：
+① LED_D1_GPIO_Port
+这是 GPIO 端口（例如 GPIOC）
+CubeMX 因为你给 PC13 起了 Label：LED_D1
+自动在 main.h 里生成了这个宏
+等价于：
+GPIOC
+② LED_D1_Pin
+这是 具体的引脚号
+等价于：
+GPIO_PIN_13
+③ GPIO_PIN_SET
+设置为 高电平
+对你的电路来说：
+PC13 = 高
+三极管导通
+LED D1 亮
+如果你改成：
+GPIO_PIN_RESET
+
+那就是灭灯。
+
+5️⃣ 那 HAL 库函数要不要我自己 include？要不要引头文件？
+答案：你什么都不用管
+原因：
+CubeMX 已经在 main.c 顶部自动生成了：
+#include "main.h"
+
+而 main.h 里又包含了：
+#include "stm32u5xx_hal.h"
+
+也就是说：
+HAL_GPIO_WritePin 已经被完整声明和链接好了
+你不需要手动 include 任何 HAL 头文件。
+
+6️⃣ 现在做一个“看得见的进阶”：让 LED 闪烁
+在 while(1) 里写：
+HAL_GPIO_TogglePin(LED_D1_GPIO_Port, LED_D1_Pin);
+HAL_Delay(500);
+解释：
+HAL_GPIO_TogglePin：翻转当前引脚状态（亮→灭，灭→亮）
+HAL_Delay(500)：延时 500 ms
+（这个延时来自 SysTick，前面时钟已经配好了）
+
+7️⃣ 你现在的完整最小点灯逻辑应该是这样
+/* USER CODE BEGIN 2 */
+HAL_GPIO_WritePin(LED_D1_GPIO_Port, LED_D1_Pin, GPIO_PIN_RESET); // 先灭灯
+/* USER CODE END 2 */
+while (1)
+{
+  /* USER CODE BEGIN WHILE */
+  HAL_GPIO_TogglePin(LED_D1_GPIO_Port, LED_D1_Pin);
+  HAL_Delay(500);
+  /* USER CODE END WHILE */
+}
+
+8️⃣ 你现在只需要做一件事（非常具体）
+在 main.c 找到
+USER CODE BEGIN 2
+while(1)
+把上面的代码照抄进去
+编译 → 下载 → 看 LED 是否闪烁
+第二个问题更关键：“函数原型我看不懂，我自己不会改参数”。这不是你笨，是你缺一套“读 HAL 原型的固定套路”。我给你一套可重复使用的读原型方法，以后遇到 UART/ADC/I2C/TIM 都按这套走。
+你读 HAL 函数原型的固定套路（5 句话，见一个吃一个）
+以你已经用过的两个函数为例：
+
+1) HAL_GPIO_TogglePin(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin);
+你按顺序读：
+函数名：TogglePin = 翻转引脚电平
+第 1 个参数类型 GPIO_TypeDef *GPIOx：
+GPIOx 代表“哪个端口”（GPIOA/GPIOB/GPIOC…）
+* 表示“指针”（你现在只需要把它当成“端口句柄”）
+第 2 个参数类型 uint16_t GPIO_Pin：
+uint16_t 是 16 位无符号整数
+这里实际传的是 GPIO_PIN_13 这种宏（一个位掩码）
+你为什么能写 LED_D1_GPIO_Port, LED_D1_Pin：
+因为 CubeMX 在 main.h 里自动给你生成了“端口宏”和“引脚宏”，你不需要自己填 GPIOC、GPIO_PIN_13
+结论：这类 GPIO 函数原型你只要认两类参数：
+端口（GPIOx）
+引脚（GPIO_Pin）
+
+2) HAL_Delay(uint32_t Delay);
+函数名：Delay = 延时
+参数类型：uint32_t 是 32 位无符号整数
+参数名 Delay：单位是 毫秒 ms
+结论：HAL_Delay(1000) 就是 1000ms。
+你真正卡住的点：参数类型看不懂怎么办？
+按下面“翻译表”理解即可（嵌入式够用，不用上来啃 C 语言理论）：
+uint8_t：0~255（1 字节）
+uint16_t：0~65535（2 字节）
+uint32_t：0~4294967295（4 字节）
+xxx_TypeDef *：外设句柄/寄存器映射指针
+你把它理解成“这个外设的身份证”，比如 GPIOA、USART1、I2C1
+工程上最实用的理解：
+*_TypeDef * 这类参数，通常你不手写，CubeMX/驱动会给你现成的宏或句柄（例如 &huart1、GPIOC）。
+你现在立刻做一个“学会看原型”的练习（只改一处）
+你已经会闪烁了。现在把你的闪烁代码从：
+HAL_GPIO_TogglePin(LED_D1_GPIO_Port, LED_D1_Pin);
+HAL_Delay(1000);
+
+改成“可读性更强、可控性更强”的写法（练参数）：
+HAL_GPIO_WritePin(LED_D1_GPIO_Port, LED_D1_Pin, GPIO_PIN_SET);
+HAL_Delay(200);
+HAL_GPIO_WritePin(LED_D1_GPIO_Port, LED_D1_Pin, GPIO_PIN_RESET);
+HAL_Delay(800);
+
+你会得到：亮 200ms、灭 800ms（周期 1s）。
+这个练习会强迫你理解：WritePin 的第三个参数是 GPIO_PinState（SET/RESET）。
+
+2) 你问的两个宏：LED_D1_GPIO_Port 和 LED_D1_Pin 到底是什么“组成”？
+结论先说死（避免你猜）
+它们不是你自己拼出来的，而是 CubeMX 根据你给 PC13 起的 Label（LED_D1）自动在 Core/Inc/main.h 里生成的两个 #define。
+你去 main.h 一定能看到类似这种定义（你的是 U5，端口/脚位以你实际为准）：
+#define LED_D1_Pin        GPIO_PIN_13
+#define LED_D1_GPIO_Port  GPIOC
+它们分别代表什么？
+LED_D1_GPIO_Port：端口（GPIOC / GPIOA / GPIOB …）
+LED_D1_Pin：引脚位掩码（GPIO_PIN_13 不是“13这个数字”，而是“第13位的bit掩码”）
+你问“端口由哪几个组成写出来的？”
+端口就是 A/B/C…这一组引脚的“寄存器组”。GPIOC 代表 C 口寄存器组。端口不是一个“字符串”，它在底层对应一段寄存器地址。
+你问“Pin 只要加 _pin 就行吗？”
+不是。
+你不要自己加 _pin 这种拼写，正确的是：
+你在 CubeMX 里给 PC13 的 User Label 写 LED_D1
+CubeMX 自动生成 固定命名：
+LED_D1_Pin
+LED_D1_GPIO_Port
+也就是说：_Pin 和 _GPIO_Port 是 CubeMX 的固定规则，不是你手写规则。
+
+3) 你贴的 HAL_GPIO_WritePin() 为什么你看不懂？我逐行翻译给你
+你贴的是函数实现（不是声明）。我们一行一行翻译成“人话”，你就懂了：
+void HAL_GPIO_WritePin(GPIO_TypeDef *GPIOx,
+                       uint16_t GPIO_Pin,
+                       GPIO_PinState PinState)
+
+参数逐个解释
+GPIO_TypeDef *GPIOx
+GPIO_TypeDef：一个结构体类型，里面装着 GPIO 端口的寄存器（ODR/IDR/BSRR 等）
+*GPIOx：指针，代表“你要操作哪个端口寄存器组”
+你传 GPIOC 本质就是传“GPIOC 这组寄存器的基地址”
+uint16_t GPIO_Pin
+16位无符号整数，但这里不当作普通数字用
+它是“位掩码”，例如：
+GPIO_PIN_13 实际是 1<<13
+所以它允许一次操作多个脚（比如 GPIO_PIN_1 | GPIO_PIN_3）
+GPIO_PinState PinState
+枚举值，只有两种：
+GPIO_PIN_SET（置位/输出高）
+GPIO_PIN_RESET（复位/输出低）
+接下来是函数体：
+/* Check the parameters */
+assert_param(IS_GPIO_PIN(GPIO_Pin));
+assert_param(IS_GPIO_PIN_ACTION(PinState));
+这两行干什么？
+这叫参数合法性检查（调试期开，发布期通常会关）
+意思是：你传进来的 GPIO_Pin 和 PinState 必须是合法值，否则就报错（断言）
+
+if (PinState != GPIO_PIN_RESET)
+{
+  GPIOx->BSRR = (uint32_t)GPIO_Pin;
+}
+else
+{
+  GPIOx->BRR  = (uint32_t)GPIO_Pin;
+}
+
+这是核心：它到底怎么“写引脚”？
+它没有去改一堆复杂东西，而是用 GPIO 的两个“专用寄存器”：
+BSRR：Bit Set/Reset Register
+往这里写某一位，就能把对应引脚置 1（输出高）
+BRR：Bit Reset Register
+往这里写某一位，就能把对应引脚置 0（输出低）
+所以整段逻辑等价于一句话：
+如果你要 SET：往 BSRR 写 pin 掩码
+如果你要 RESET：往 BRR 写 pin 掩码
+这就是 HAL 的本质：把你“想要高/低”的意图，翻译成一次寄存器写操作。
+
+4) 你现在立刻能做的“理解验证”（只做一个小动作）
+你说“我还是不太懂原型”，最有效的办法不是继续听解释，而是用 Keil 把宏展开看一眼。
+你现在只做这一件事：
+打开 Core/Inc/main.h，找到这两行（复制给我）：
+#define LED_D1_Pin ...
+#define LED_D1_GPIO_Port ...
+你一复制出来，你就会瞬间明白：
+Port 到底是 GPIOA/B/C 的哪一个
+Pin 到底是不是 GPIO_PIN_13
+
+5) 回到你第一个现象：LD3 为什么会跟着闪？
+你现在已经知道扩展板的 LD3 由网名 LED3 控制。要判断它是不是跟 PC13 同网，必须做一条证据链：
+去底板/核心板原理图里 搜索网络名 LED3
+看 LED3 最终是不是接到了 PC13（或接到了你现在点灯用的那根 LED_D1 网络）
+如果你愿意，我可以直接帮你查：你把“底板/扩展板那份 PDF 的页码（或再截一张包含 LED3 网络连接到主控连接器的那页）”发我，
+我会把 LED3 → 连接器脚位 → 核心板对应脚 → MCU 引脚名 这条链路给你写成一条“可复现的追网步骤”。
+
+2) 你给的宏定义：为什么是 GPIOC？这说明了什么？
+你已经找到：
+#define LED_D1_Pin GPIO_PIN_13
+#define LED_D1_GPIO_Port GPIOC
+
+这两行等价于一句话：
+LED_D1 = 端口 C 的第 13 号引脚（PC13）
+所以是 GPIOC，完全符合我们通过原理图/接口表追出来的结果。
+
+3) 你问：#define 是什么意思？
+#define 是 C 语言预处理指令，它做的是文本替换（非常重要：不是变量赋值）。
+例如：
+#define LED_D1_GPIO_Port GPIOC
+意思是：在编译前，预处理器会把你代码里出现的 LED_D1_GPIO_Port 这个“名字”，直接替换成 GPIOC。
+所以你写：
+HAL_GPIO_TogglePin(LED_D1_GPIO_Port, LED_D1_Pin);
+
+预处理后等价于：
+
+HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+
+工程意义：
+你以后换灯脚，只要改 CubeMX 的引脚/Label，再生成，宏会自动更新，你的业务代码不用改。
+
+4) 你问：GPIOA/B/C 是什么？为什么会有 GPIOC？
+这是 STM32 的“端口分组”机制。
+
+4.1 端口是什么？
+STM32 把一堆引脚分成组，每组 16 个脚：
+GPIOA：PA0 ~ PA15
+GPIOB：PB0 ~ PB15
+GPIOC：PC0 ~ PC15
+（还有 GPIOD/E/F… 取决于芯片封装）
+这不是随便命名的，它对应硬件上一整组寄存器。
+每个端口都有一套寄存器（例如：模式寄存器、输出寄存器、置位/复位寄存器……），用来控制这一组 16 个脚。
+
+4.2 为什么是 GPIOC？
+因为你的 LED 物理连接在 PC13：
+PC13 里：
+C 表示端口 C → GPIOC
+13 表示端口内第 13 号脚 → GPIO_PIN_13
+所以 LED_D1_GPIO_Port 必然是 GPIOC。
+
+5) 你现在对“函数原型”卡住的点，我给你一个最短的读法
+以后你看到这种原型：
+HAL_GPIO_WritePin(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, GPIO_PinState PinState)
+
+你只用一句话翻译：
+对 GPIOx 这个端口的 GPIO_Pin 这个脚，写入 PinState（高/低）。
+套到你这里就是：
+对 GPIOC 端口的 GPIO_PIN_13 脚，写 SET 或 RESET。
+你现在已经能把 LED_D1_GPIO_Port 替换成 GPIOC，把 LED_D1_Pin 替换成 GPIO_PIN_13，这就等于你已经会读 70% 的 GPIO HAL 原型了。
+下一小步（只做一件事）：让你“看见 #define 替换”
+你现在在 Keil 做这个动作（很简单，但非常有用）：
+找到你写的这一行：
+HAL_GPIO_TogglePin(LED_D1_GPIO_Port, LED_D1_Pin);
+
+把它下面再加一行“完全展开写法”（用于对照理解）：
+HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+
+编译下载，现象应该完全一样。
+你做完告诉我“现象一样”，我下一步只讲一件事：
+GPIO_PIN_13 为什么不是数字 13，而是 (1<<13) 的位掩码；以及为什么 uint16_t 足够装它。
