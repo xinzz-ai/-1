@@ -1,1 +1,30 @@
+#include <stddef.h>
 
+size_t my_strlen(const char *s)
+{
+    const char *p = s;
+    size_t len = 0;
+
+    while (*p != '\0') {
+        p++;
+        len++;
+    }
+    return len;
+}
+
+
+
+char *my_strcpy(char *dst, const char *src)
+{
+    char *d = dst;
+    const char *s = src;
+
+    while (*s != '\0') {
+        *d = *s;
+        d++;
+        s++;
+    }
+    *d = '\0';
+
+    return dst;
+}
