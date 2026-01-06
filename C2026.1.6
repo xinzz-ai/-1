@@ -1,1 +1,36 @@
-asd 
+我写的strcmp比较字符串大小
+int my_strcmp(const char *a,const chat *b)
+{
+	const chat *m = a;
+	const chat *n = b;
+	while(*m!='\0' && *n!='\0')
+	{
+		if(*m != *n)
+		{
+			return (*m - *n);
+		}
+		else
+		{
+			m++;
+			n++;
+		}
+		
+	}
+	return *m - *n;
+}
+AI写的strcmp
+int my_strcmp(const char *a, const char *b)
+{
+    const char *m = a;
+    const char *n = b;
+
+    while (*m != '\0' && *n != '\0') {
+        if (*m != *n) {
+            return (int)(*m - *n);
+        }
+        m++;
+        n++;
+    }
+
+    return (int)(*m - *n);
+}
